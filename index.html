@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Kindle 信息看板 — 时间、天气、每日一句、海报展示">
+<meta name="color-scheme" content="light dark">
+<title>Kindle 信息看板</title>
+<style>
+  /* ===== Reset & Base ===== */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; }
+  body {
+    font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", Georgia, "Times New Roman", serif;
+    background: #faf9f6;
+    color: #1a1a1a;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 1.5rem 1.25rem;
+    line-height: 1.6;
+    min-height: 100vh;
+    transition: background 0.3s, color 0.3s;
+  }
+
+  /* ===== Header ===== */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1.75rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid #ddd;
+  }
+  .header-title { font-size: 1.35rem; font-weight: 700; letter-spacing: 0.03em; }
+  .header-actions { display: flex; gap: 0.5rem; }
+
+  /* ===== Buttons ===== */
+  .btn {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    font-family: inherit; font-size: 0.85rem;
+    padding: 0.4rem 0.9rem; border: 1.5px solid #999; border-radius: 6px;
+    background: transparent; color: inherit; cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .btn:hover { background: #e8e6e0; border-color: #666; }
+  .btn:active { background: #d9d7d1; }
+  .btn--small { font-size: 0.75rem; padding: 0.3rem 0.6rem; }
+
+  /* ===== Grid Layout ===== */
+  .dashboard { display: grid; gap: 1.25rem; }
+  .card {
+    background: #fff;
+    border: 1px solid #e0ded8;
+    border-radius: 10px;
+    padding: 1.25rem 1.4rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    transition: background 0.3s, border-color 0.3s;
+  }
+  .card__title {
+    font-size: 0.8rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #777;
+    margin-bottom: 0.75rem;
+  }
+
+  /* ===== Clock ===== */
+  .clock-time {
+    font-size: 3.2rem; font-weight: 700; letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums; font-family: "SF Mono", "Cascadia Code", "Consolas", monospace;
+  }
+  .clock-date {
+    font-size: 1rem; color: #666; margin-top: 0.2rem;
+  }
+  .clock-row { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+
+  /* ===== Weather ===== */
+  .weather-main {
+    display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+  }
+  .weather-temp { font-size: 2.4rem; font-weight: 700; }
+  .weather-desc { font-size: 1rem; color: #555; }
+  .weather-extras {
+    display: flex; gap: 1.25rem; flex-wrap: wrap;
+    margin-top: 0.6rem; font-size: 0.9rem; color: #666;
+  }
+  .weather-extras span { display: inline-flex; align-items: center; gap: 0.2rem; }
+  .weather-location { font-size: 0.8rem; color: #999; margin-top: 0.25rem; }
+  .weather-icon { font-size: 2.6rem; line-height: 1; }
+  .weather-fetch-time { font-size: 0.7rem; color: #aaa; margin-top: 0.35rem; }
+
+  /* ===== Quote ===== */
+  .quote-text {
+    font-size: 1.15rem; font-style: italic; position: relative;
+    padding-left: 1.2rem; border-left: 3px solid #ccc;
+  }
+  .quote-text::before { content: "\201C"; }
+  .quote-text::after  { content: "\201D"; }
+  .quote-author {
+    margin-top: 0.5rem; font-size: 0.9rem; color: #777; text-align: right;
+  }
+  .quote-author::before { content: "\2014 "; }
+
+  /* ===== Poster ===== */
+  .poster-container {
+    text-align: center; position: relative; min-height: 120px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .poster-img {
+    max-width: 100%; max-height: 450px; border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: block;
+  }
+  .poster-placeholder {
+    color: #bbb; font-size: 0.95rem;
+  }
+
+  /* ===== Settings Panel ===== */
+  .settings-panel {
+    display: none; margin-top: 0.5rem;
+  }
+  .settings-panel--open { display: block; }
+  .settings-form { display: grid; gap: 0.9rem; }
+  .field { display: flex; flex-direction: column; gap: 0.25rem; }
+  .field label { font-size: 0.8rem; font-weight: 600; color: #555; }
+  .field input, .field select {
+    font-family: inherit; font-size: 0.9rem;
+    padding: 0.45rem 0.7rem; border: 1.5px solid #ccc; border-radius: 6px;
+    background: #faf9f6; color: inherit;
+  }
+  .field input:focus, .field select:focus {
+    outline: none; border-color: #888; background: #fff;
+  }
+  .field-hint { font-size: 0.7rem; color: #aaa; }
+  .field-row { display: flex; gap: 0.6rem; align-items: end; }
+  .field-row .field { flex: 1; }
+  .settings-actions {
+    display: flex; gap: 0.5rem; margin-top: 0.5rem;
+    justify-content: flex-end;
+  }
+
+  /* ===== Status bar ===== */
+  .status-bar {
+    margin-top: 1.5rem; padding-top: 0.75rem;
+    border-top: 1px solid #ddd; font-size: 0.72rem; color: #aaa;
+    display: flex; justify-content: space-between; flex-wrap: wrap;
+  }
+  .status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 0.25rem; }
+  .status-dot--ok { background: #4caf50; }
+  .status-dot--err { background: #e53935; }
+
+  /* ===== Dark mode ===== */
+  @media (prefers-color-scheme: dark) {
+    body { background: #1e1e1e; color: #e0dcd0; }
+    .card { background: #2a2a2a; border-color: #3a3830; }
+    .header { border-bottom-color: #444; }
+    .status-bar { border-top-color: #444; }
+    .card__title { color: #aaa; }
+    .clock-date, .weather-desc, .quote-author, .weather-extras, .field label { color: #aaa; }
+    .btn { border-color: #666; }
+    .btn:hover { background: #3a3a3a; border-color: #999; }
+    .field input, .field select { background: #2a2a2a; border-color: #555; color: #e0dcd0; }
+    .field input:focus, .field select:focus { background: #333; border-color: #999; }
+    .quote-text { border-left-color: #555; }
+    .poster-placeholder, .weather-fetch-time, .field-hint { color: #666; }
+    .weather-location { color: #777; }
+    .poster-img { box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+  }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 600px) {
+    body { padding: 1rem 0.75rem; }
+    .clock-time { font-size: 2.2rem; }
+    .weather-temp { font-size: 1.8rem; }
+    .header { flex-direction: column; gap: 0.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== Header ===== -->
+<div class="header">
+  <div>
+    <span class="header-title">📋 Kindle 信息看板</span>
+    <div class="header-greeting" id="headerGreeting" style="font-size:0.85rem;color:#888;margin-top:0.15rem;">加载中…</div>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn--small" id="btnRefresh" title="刷新全部数据">⟳ 刷新</button>
+    <button class="btn btn--small" id="btnSettings" title="设置">⚙ 设置</button>
+  </div>
+</div>
+
+<!-- ===== Dashboard Grid ===== -->
+<div class="dashboard">
+
+  <!-- Clock -->
+  <div class="card" id="cardClock">
+    <div class="card__title">⏱ 当前时间</div>
+    <div class="clock-row">
+      <span class="clock-time" id="clockTime">--:--:--</span>
+    </div>
+    <div class="clock-date" id="clockDate">----年--月--日 星期-</div>
+  </div>
+
+  <!-- Weather -->
+  <div class="card" id="cardWeather">
+    <div class="card__title">🌤 天气预报</div>
+    <div class="weather-main">
+      <span class="weather-icon" id="weatherIcon">--</span>
+      <span class="weather-temp" id="weatherTemp">--°</span>
+      <span class="weather-desc" id="weatherDesc">加载中…</span>
+    </div>
+    <div class="weather-extras">
+      <span>💧 <span id="weatherHumidity">--</span>%</span>
+      <span>💨 <span id="weatherWind">--</span> km/h</span>
+    </div>
+    <div class="weather-location" id="weatherLocation"></div>
+    <div class="weather-fetch-time" id="weatherFetchTime"></div>
+  </div>
+
+  <!-- Daily Quote -->
+  <div class="card" id="cardQuote">
+    <div class="card__title">📖 每日一句</div>
+    <div class="quote-text" id="quoteText">正在加载…</div>
+    <div class="quote-author" id="quoteAuthor">--</div>
+  </div>
+
+  <!-- Poster -->
+  <div class="card" id="cardPoster">
+    <div class="card__title">🖼 海报</div>
+    <div class="poster-container" id="posterContainer">
+      <div class="poster-placeholder" id="posterPlaceholder">未设置海报 URL，请在设置中配置</div>
+      <img class="poster-img" id="posterImg" src="" alt="海报" style="display:none">
+    </div>
+  </div>
+
+  <!-- Settings Panel -->
+  <div class="card settings-panel" id="settingsPanel">
+    <div class="card__title">⚙ 设置</div>
+    <form class="settings-form" id="settingsForm" autocomplete="off">
+      <div class="field">
+        <label for="settingLat">纬度 Latitude</label>
+        <input type="number" id="settingLat" step="any" min="-90" max="90" placeholder="例如 31.23 (上海)">
+        <span class="field-hint">用于 Open-Meteo 天气定位（无需 API Key）</span>
+      </div>
+      <div class="field">
+        <label for="settingLon">经度 Longitude</label>
+        <input type="number" id="settingLon" step="any" min="-180" max="180" placeholder="例如 121.47 (上海)">
+      </div>
+      <div class="field">
+        <label for="settingCity">城市名称（仅用于显示）</label>
+        <input type="text" id="settingCity" placeholder="例如 上海">
+      </div>
+      <div class="field">
+        <label for="settingUnit">温度单位</label>
+        <select id="settingUnit">
+          <option value="celsius">摄氏度 °C</option>
+          <option value="fahrenheit">华氏度 °F</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="settingPoster">海报图片 URL</label>
+        <input type="url" id="settingPoster" placeholder="https://example.com/poster.jpg">
+        <span class="field-hint">支持 JPG/PNG/WebP，留空则隐藏海报卡片</span>
+      </div>
+      <div class="field">
+        <label for="settingRefresh">天气刷新间隔（分钟）</label>
+        <input type="number" id="settingRefresh" min="5" max="120" value="30">
+        <span class="field-hint">建议 15–60 分钟，过短浪费流量</span>
+      </div>
+      <div class="settings-actions">
+        <button type="button" class="btn" id="btnGeoDetect">📍 自动定位</button>
+        <button type="button" class="btn" id="btnSettingsReset">↺ 恢复默认</button>
+        <button type="submit" class="btn" style="font-weight:700">✓ 保存设置</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===== Status Bar ===== -->
+<div class="status-bar">
+  <span>
+    <span class="status-dot" id="statusWeather"></span> 天气
+    <span class="status-dot" id="statusQuote"></span> 名言
+  </span>
+  <span id="statusTime">加载中…</span>
+</div>
+
+<script>
+/* ==================================================================
+   Kindle 信息看板 — 主脚本
+   纯静态，无依赖，所有设置保存到 localStorage
+   数据源：Open-Meteo (天气) + Quotable (名言)
+   ================================================================== */
+
+// ---------- 常量 ----------
+const STORAGE_KEY = 'kindle-dashboard-settings';
+const WEATHER_API  = 'https://api.open-meteo.com/v1/forecast';
+const QUOTE_API    = 'https://api.quotable.io/random';
+
+const DEFAULT_SETTINGS = {
+  lat: 31.2304,          // 上海
+  lon: 121.4737,
+  city: '上海',
+  unit: 'celsius',       // celsius | fahrenheit
+  posterUrl: '',
+  refreshMin: 30,        // 天气刷新间隔（分钟）
+};
+
+// 天气代码 → 图标 + 描述
+const WEATHER_CODES = {
+  0:  ['☀️', '晴天'],
+  1:  ['🌤', '大部晴朗'],
+  2:  ['⛅', '多云'],
+  3:  ['☁️', '阴天'],
+  45: ['🌫', '雾'],
+  48: ['🌫', '雾凇'],
+  51: ['🌦', '小毛毛雨'],
+  53: ['🌦', '中毛毛雨'],
+  55: ['🌦', '大毛毛雨'],
+  56: ['🌧', '冻毛毛雨'],
+  57: ['🌧', '冻毛毛雨'],
+  61: ['🌧', '小雨'],
+  63: ['🌧', '中雨'],
+  65: ['🌧', '大雨'],
+  66: ['🌨', '冻雨'],
+  67: ['🌨', '冻雨'],
+  71: ['❄️', '小雪'],
+  73: ['❄️', '中雪'],
+  75: ['❄️', '大雪'],
+  77: ['🌨', '雪粒'],
+  80: ['🌦', '阵雨'],
+  81: ['🌧', '中阵雨'],
+  82: ['🌧', '大阵雨'],
+  85: ['🌨', '小阵雪'],
+  86: ['🌨', '大阵雪'],
+  95: ['⛈', '雷暴'],
+  96: ['⛈', '雷暴+小冰雹'],
+  99: ['⛈', '雷暴+大冰雹'],
+};
+
+// 内置名言库（100条，按日期种子选取确保同一天显示同一句）
+const FALLBACK_QUOTES = [
+  { text:'生活不止眼前的苟且，还有诗和远方的田野。', author:'高晓松' },
+  { text:'人生如逆旅，我亦是行人。', author:'苏轼' },
+  { text:'世界上最宽阔的是海洋，比海洋更宽阔的是天空，比天空更宽阔的是人的心灵。', author:'雨果' },
+  { text:'黑夜无论怎样悠长，白昼总会到来。', author:'莎士比亚' },
+  { text:'活着就是为了改变世界，难道还有其他原因吗？', author:'乔布斯' },
+  { text:'人生最终的价值在于觉醒和思考的能力，而不只在于生存。', author:'亚里士多德' },
+  { text:'不要努力成为一个成功者，努力成为一个有价值的人。', author:'爱因斯坦' },
+  { text:'我们热爱这个世界时，才真正活在这个世界上。', author:'泰戈尔' },
+  { text:'天空没有翅膀的痕迹，但我已飞过。', author:'泰戈尔' },
+  { text:'你若爱，生活哪里都可爱。', author:'丰子恺' },
+  { text:'不乱于心，不困于情，不畏将来，不念过往。', author:'丰子恺' },
+  { text:'人生如梦，一尊还酹江月。', author:'苏轼' },
+  { text:'山重水复疑无路，柳暗花明又一村。', author:'陆游' },
+  { text:'路漫漫其修远兮，吾将上下而求索。', author:'屈原' },
+  { text:'天生我材必有用，千金散尽还复来。', author:'李白' },
+  { text:'长风破浪会有时，直挂云帆济沧海。', author:'李白' },
+  { text:'会当凌绝顶，一览众山小。', author:'杜甫' },
+  { text:'海内存知己，天涯若比邻。', author:'王勃' },
+  { text:'不以物喜，不以己悲。', author:'范仲淹' },
+  { text:'先天下之忧而忧，后天下之乐而乐。', author:'范仲淹' },
+  { text:'天行健，君子以自强不息。', author:'《周易》' },
+  { text:'地势坤，君子以厚德载物。', author:'《周易》' },
+  { text:'学而不思则罔，思而不学则殆。', author:'孔子' },
+  { text:'知之者不如好之者，好之者不如乐之者。', author:'孔子' },
+  { text:'三人行，必有我师焉。', author:'孔子' },
+  { text:'己所不欲，勿施于人。', author:'孔子' },
+  { text:'千里之行，始于足下。', author:'老子' },
+  { text:'上善若水，水善利万物而不争。', author:'老子' },
+  { text:'大道至简。', author:'老子' },
+  { text:'知行合一。', author:'王阳明' },
+  { text:'读书破万卷，下笔如有神。', author:'杜甫' },
+  { text:'纸上得来终觉浅，绝知此事要躬行。', author:'陆游' },
+  { text:'问渠那得清如许，为有源头活水来。', author:'朱熹' },
+  { text:'宝剑锋从磨砺出，梅花香自苦寒来。', author:'警世贤文' },
+  { text:'业精于勤，荒于嬉；行成于思，毁于随。', author:'韩愈' },
+  { text:'不积跬步，无以至千里；不积小流，无以成江海。', author:'荀子' },
+  { text:'青，取之于蓝而青于蓝；冰，水为之而寒于水。', author:'荀子' },
+  { text:'人生自古谁无死，留取丹心照汗青。', author:'文天祥' },
+  { text:'落红不是无情物，化作春泥更护花。', author:'龚自珍' },
+  { text:'春蚕到死丝方尽，蜡炬成灰泪始干。', author:'李商隐' },
+  { text:'曾经沧海难为水，除却巫山不是云。', author:'元稹' },
+  { text:'两情若是久长时，又岂在朝朝暮暮。', author:'秦观' },
+  { text:'但愿人长久，千里共婵娟。', author:'苏轼' },
+  { text:'众里寻他千百度，蓦然回首，那人却在灯火阑珊处。', author:'辛弃疾' },
+  { text:'人生若只如初见，何事秋风悲画扇。', author:'纳兰性德' },
+  { text:'非淡泊无以明志，非宁静无以致远。', author:'诸葛亮' },
+  { text:'鞠躬尽瘁，死而后已。', author:'诸葛亮' },
+  { text:'老骥伏枥，志在千里。烈士暮年，壮心不已。', author:'曹操' },
+  { text:'大漠孤烟直，长河落日圆。', author:'王维' },
+  { text:'采菊东篱下，悠然见南山。', author:'陶渊明' },
+  { text:'人生得意须尽欢，莫使金樽空对月。', author:'李白' },
+  { text:'欲穷千里目，更上一层楼。', author:'王之涣' },
+  { text:'独在异乡为异客，每逢佳节倍思亲。', author:'王维' },
+  { text:'海阔凭鱼跃，天高任鸟飞。', author:'《诗话总龟》' },
+  { text:'沉舟侧畔千帆过，病树前头万木春。', author:'刘禹锡' },
+  { text:'山不在高，有仙则名。水不在深，有龙则灵。', author:'刘禹锡' },
+  { text:'出淤泥而不染，濯清涟而不妖。', author:'周敦颐' },
+  { text:'天下兴亡，匹夫有责。', author:'顾炎武' },
+  { text:'为中华之崛起而读书。', author:'周恩来' },
+  { text:'时间就是生命，浪费时间就是浪费生命。', author:'鲁迅' },
+  { text:'哪里有天才，我是把别人喝咖啡的工夫都用在工作上的。', author:'鲁迅' },
+  { text:'世上本没有路，走的人多了，也便成了路。', author:'鲁迅' },
+  { text:'真的猛士，敢于直面惨淡的人生，敢于正视淋漓的鲜血。', author:'鲁迅' },
+  { text:'人生的价值，并不是用时间，而是用深度去衡量的。', author:'列夫·托尔斯泰' },
+  { text:'理想的书籍是智慧的钥匙。', author:'列夫·托尔斯泰' },
+  { text:'知识就是力量。', author:'培根' },
+  { text:'读史使人明智，读诗使人灵秀。', author:'培根' },
+  { text:'我思故我在。', author:'笛卡尔' },
+  { text:'存在即合理。', author:'黑格尔' },
+  { text:'人不能两次踏进同一条河流。', author:'赫拉克利特' },
+  { text:'认识你自己。', author:'苏格拉底' },
+  { text:'未经审视的人生不值得过。', author:'苏格拉底' },
+  { text:'吾爱吾师，吾更爱真理。', author:'亚里士多德' },
+  { text:'给我一个支点，我能撬动整个地球。', author:'阿基米德' },
+  { text:'如果说我看得比别人更远些，那是因为我站在巨人的肩膀上。', author:'牛顿' },
+  { text:'天才就是百分之一的灵感加上百分之九十九的汗水。', author:'爱迪生' },
+  { text:'想象力比知识更重要。', author:'爱因斯坦' },
+  { text:'成功等于艰苦劳动加正确方法加少说空话。', author:'爱因斯坦' },
+  { text:'生命在于运动。', author:'伏尔泰' },
+  { text:'我不同意你的观点，但我誓死捍卫你说话的权利。', author:'伏尔泰' },
+  { text:'自由不是想做什么就做什么，而是不想做什么就不做什么。', author:'康德' },
+  { text:'人是目的，不是手段。', author:'康德' },
+  { text:'每一个不曾起舞的日子，都是对生命的辜负。', author:'尼采' },
+  { text:'凡杀不死我的，必使我更强大。', author:'尼采' },
+  { text:'当你凝视深渊时，深渊也在凝视你。', author:'尼采' },
+  { text:'幸福不过是欲望的暂时停止。', author:'叔本华' },
+  { text:'人生就像钟摆，在痛苦和无聊之间摆动。', author:'叔本华' },
+  { text:'人生而自由，却无往不在枷锁之中。', author:'卢梭' },
+  { text:'Stay hungry, stay foolish.', author:'Steve Jobs' },
+  { text:'The only way to do great work is to love what you do.', author:'Steve Jobs' },
+  { text:'In the middle of difficulty lies opportunity.', author:'Albert Einstein' },
+  { text:'Simplicity is the ultimate sophistication.', author:'Leonardo da Vinci' },
+  { text:'The unexamined life is not worth living.', author:'Socrates' },
+  { text:'To be, or not to be, that is the question.', author:'Shakespeare' },
+  { text:'I think, therefore I am.', author:'Descartes' },
+  { text:'The journey of a thousand miles begins with a single step.', author:'Lao Tzu' },
+  { text:'Education is not the filling of a pail, but the lighting of a fire.', author:'W.B. Yeats' },
+  { text:'Be yourself; everyone else is already taken.', author:'Oscar Wilde' },
+  { text:'Two things are infinite: the universe and human stupidity.', author:'Albert Einstein' },
+  { text:'学而时习之，不亦说乎。', author:'孔子' },
+  { text:'温故而知新，可以为师矣。', author:'孔子' },
+];
+
+// ---------- 全局状态 ----------
+let settings = { ...DEFAULT_SETTINGS };
+let weatherTimer = null;
+let clockTimer = null;
+
+// ---------- DOM 引用 ----------
+const $ = (sel) => document.querySelector(sel);
+
+// ---------- 设置管理 ----------
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      settings = { ...DEFAULT_SETTINGS, ...parsed };
+    }
+  } catch (e) {
+    console.warn('设置读取失败，使用默认值', e);
+    settings = { ...DEFAULT_SETTINGS };
+  }
+}
+
+function saveSettings(newSettings) {
+  settings = { ...settings, ...newSettings };
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  } catch (e) {
+    console.warn('设置保存失败', e);
+  }
+  applySettings();
+}
+
+function applySettings() {
+  // 更新表单
+  $('#settingLat').value     = settings.lat;
+  $('#settingLon').value     = settings.lon;
+  $('#settingCity').value    = settings.city;
+  $('#settingUnit').value    = settings.unit;
+  $('#settingPoster').value  = settings.posterUrl;
+  $('#settingRefresh').value = settings.refreshMin;
+
+  // 更新海报
+  renderPoster();
+
+  // 重启天气轮询
+  startWeatherPolling();
+
+  // 更新位置显示
+  $('#weatherLocation').textContent = settings.city
+    ? `📍 ${settings.city} (${settings.lat.toFixed(2)}, ${settings.lon.toFixed(2)})`
+    : `📍 (${settings.lat.toFixed(2)}, ${settings.lon.toFixed(2)})`;
+
+  updateStatusDots();
+}
+
+function populateSettingsForm() {
+  $('#settingLat').value     = settings.lat;
+  $('#settingLon').value     = settings.lon;
+  $('#settingCity').value    = settings.city;
+  $('#settingUnit').value    = settings.unit;
+  $('#settingPoster').value  = settings.posterUrl;
+  $('#settingRefresh').value = settings.refreshMin;
+}
+
+// ---------- 时钟 ----------
+function updateGreeting() {
+  const h = new Date().getHours();
+  let greet;
+  if (h < 6)       greet = '夜深了，注意休息 🌙';
+  else if (h < 9)  greet = '早上好，新的一天开始了 ☀️';
+  else if (h < 12) greet = '上午好，精力充沛的时刻 💪';
+  else if (h < 14) greet = '中午好，别忘了按时吃饭 🍚';
+  else if (h < 18) greet = '下午好，保持专注 🌤';
+  else             greet = '晚上好，放松一下心情 🌙';
+  const el = $('#headerGreeting');
+  if (el) el.textContent = greet;
+}
+
+function updateClock() {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  $('#clockTime').textContent = `${hh}:${mm}:${ss}`;
+
+  const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  const w = weekdays[now.getDay()];
+  $('#clockDate').textContent = `${y}年${m}月${d}日 星期${w}`;
+
+  // 每分钟更新一次问候语
+  if (now.getSeconds() === 0) updateGreeting();
+}
+
+function startClock() {
+  updateClock();
+  if (clockTimer) clearInterval(clockTimer);
+  clockTimer = setInterval(updateClock, 1000);
+}
+
+// ---------- 天气 ----------
+async function fetchWeather() {
+  const unitParam = settings.unit === 'fahrenheit' ? '&temperature_unit=fahrenheit' : '';
+  const url = `${WEATHER_API}?latitude=${settings.lat}&longitude=${settings.lon}`
+    + `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code`
+    + `&timezone=auto${unitParam}`;
+
+  setWeatherStatus(false);
+
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    const cur = data.current;
+
+    const code   = cur.weather_code;
+    const temp   = Math.round(cur.temperature_2m);
+    const unit   = settings.unit === 'fahrenheit' ? '°F' : '°C';
+    const hum    = cur.relative_humidity_2m;
+    const wind   = cur.wind_speed_10m;
+    const [icon, desc] = WEATHER_CODES[code] || ['🌡', '未知'];
+
+    $('#weatherIcon').textContent     = icon;
+    $('#weatherTemp').textContent     = `${temp}${unit}`;
+    $('#weatherDesc').textContent     = desc;
+    $('#weatherHumidity').textContent = hum;
+    $('#weatherWind').textContent     = wind;
+
+    const now = new Date();
+    const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+    $('#weatherFetchTime').textContent = `更新于 ${ts}`;
+
+    setWeatherStatus(true);
+  } catch (e) {
+    console.error('天气获取失败:', e);
+    $('#weatherDesc').textContent = '获取失败，稍后重试';
+    setWeatherStatus(false);
+  }
+}
+
+function setWeatherStatus(ok) {
+  const dot = $('#statusWeather');
+  dot.className = 'status-dot ' + (ok ? 'status-dot--ok' : 'status-dot--err');
+}
+
+function startWeatherPolling() {
+  if (weatherTimer) clearInterval(weatherTimer);
+  fetchWeather(); // 立即获取
+  const ms = (settings.refreshMin || 30) * 60 * 1000;
+  weatherTimer = setInterval(fetchWeather, ms);
+}
+
+// ---------- 每日一句 ----------
+async function fetchQuote() {
+  try {
+    const resp = await fetch(QUOTE_API + '?maxLength=120');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    $('#quoteText').textContent   = data.content;
+    $('#quoteAuthor').textContent = data.author;
+    setQuoteStatus(true);
+
+    // 缓存到 sessionStorage（同一天不重复请求）
+    sessionStorage.setItem('kindle-quote', JSON.stringify({
+      text: data.content, author: data.author, date: new Date().toDateString()
+    }));
+  } catch (e) {
+    console.warn('名言 API 失败，使用后备:', e);
+    useFallbackQuote();
+  }
+}
+
+function getDateSeed() {
+  const now = new Date();
+  return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+}
+
+function useFallbackQuote() {
+  // 优先用 sessionStorage 缓存（同一天显示同一句）
+  const cached = sessionStorage.getItem('kindle-quote');
+  if (cached) {
+    try {
+      const q = JSON.parse(cached);
+      if (q.date === new Date().toDateString()) {
+        $('#quoteText').textContent   = q.text;
+        $('#quoteAuthor').textContent = q.author;
+        return;
+      }
+    } catch (_) {}
+  }
+  // 日期种子选取：保证同一天显示同一句，每天自动轮换
+  const idx = getDateSeed() % FALLBACK_QUOTES.length;
+  const q   = FALLBACK_QUOTES[idx];
+  $('#quoteText').textContent   = q.text;
+  $('#quoteAuthor').textContent = q.author;
+  setQuoteStatus(false);
+}
+
+function setQuoteStatus(ok) {
+  const dot = $('#statusQuote');
+  dot.className = 'status-dot ' + (ok ? 'status-dot--ok' : 'status-dot--err');
+}
+
+function loadQuote() {
+  // 今天已加载过就用缓存，否则重新获取
+  const cached = sessionStorage.getItem('kindle-quote');
+  if (cached) {
+    try {
+      const q = JSON.parse(cached);
+      if (q.date === new Date().toDateString()) {
+        $('#quoteText').textContent   = q.text;
+        $('#quoteAuthor').textContent = q.author;
+        setQuoteStatus(true);
+        return;
+      }
+    } catch (_) {}
+  }
+  fetchQuote();
+}
+
+// ---------- 海报 ----------
+function renderPoster() {
+  const url   = settings.posterUrl && settings.posterUrl.trim();
+  const img   = $('#posterImg');
+  const ph    = $('#posterPlaceholder');
+  const card  = $('#cardPoster');
+
+  if (url) {
+    card.style.display = '';
+    img.src = url;
+    img.style.display = 'block';
+    img.alt = '海报';
+    ph.style.display = 'none';
+    img.onerror = () => {
+      img.style.display = 'none';
+      ph.style.display = '';
+      ph.textContent = '⚠️ 海报图片加载失败，请检查 URL';
+    };
+    img.onload = () => {
+      img.style.display = 'block';
+      ph.style.display = 'none';
+    };
+  } else {
+    card.style.display = '';
+    img.style.display = 'none';
+    ph.style.display = '';
+    ph.textContent = '未设置海报 URL，请在设置中配置';
+  }
+}
+
+// ---------- 设置 UI ----------
+function toggleSettings() {
+  const panel = $('#settingsPanel');
+  const isOpen = panel.classList.toggle('settings-panel--open');
+  if (isOpen) populateSettingsForm();
+}
+
+$('#btnSettings').addEventListener('click', toggleSettings);
+
+$('#settingsForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const newSettings = {
+    lat:        parseFloat($('#settingLat').value) || DEFAULT_SETTINGS.lat,
+    lon:        parseFloat($('#settingLon').value) || DEFAULT_SETTINGS.lon,
+    city:       $('#settingCity').value.trim(),
+    unit:       $('#settingUnit').value,
+    posterUrl:  $('#settingPoster').value.trim(),
+    refreshMin: parseInt($('#settingRefresh').value, 10) || 30,
+  };
+  saveSettings(newSettings);
+  $('#settingsPanel').classList.remove('settings-panel--open');
+  updateStatusDots();
+});
+
+$('#btnSettingsReset').addEventListener('click', () => {
+  if (confirm('确定要恢复默认设置吗？当前设置将被清除。')) {
+    saveSettings({ ...DEFAULT_SETTINGS });
+    populateSettingsForm();
+  }
+});
+
+$('#btnGeoDetect').addEventListener('click', () => {
+  if (!navigator.geolocation) {
+    alert('您的浏览器不支持地理定位。请手动输入经纬度。');
+    return;
+  }
+  $('#btnGeoDetect').textContent = '📍 定位中…';
+  $('#btnGeoDetect').disabled = true;
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      $('#settingLat').value  = pos.coords.latitude.toFixed(4);
+      $('#settingLon').value  = pos.coords.longitude.toFixed(4);
+      $('#settingCity').value = '当前位置';
+      $('#btnGeoDetect').textContent = '📍 自动定位';
+      $('#btnGeoDetect').disabled = false;
+    },
+    (err) => {
+      console.warn('定位失败:', err);
+      alert('定位失败：' + err.message + '\n请手动输入经纬度。');
+      $('#btnGeoDetect').textContent = '📍 自动定位';
+      $('#btnGeoDetect').disabled = false;
+    },
+    { enableHighAccuracy: false, timeout: 10000 }
+  );
+});
+
+// ---------- 刷新按钮 ----------
+$('#btnRefresh').addEventListener('click', () => {
+  fetchWeather();
+  loadQuote();
+  renderPoster();
+});
+
+// ---------- 状态栏 ----------
+function updateStatusDots() {
+  // 天气状态由 fetchWeather 设置
+  setWeatherStatus(false); // 将在 fetchWeather 中更新
+  setQuoteStatus(false);   // 将在 loadQuote 中更新
+}
+
+function updateStatusTime() {
+  const now = new Date();
+  $('#statusTime').textContent = `本地时间 ${now.toLocaleString('zh-CN')}`;
+}
+
+// ---------- 初始化 ----------
+function init() {
+  loadSettings();
+  applySettings();
+  populateSettingsForm();
+  updateGreeting();
+  startClock();
+  loadQuote();
+  updateStatusTime();
+  setInterval(updateStatusTime, 60000); // 每分钟更新状态栏
+}
+
+// 页面加载完成后启动
+document.addEventListener('DOMContentLoaded', init);
+</script>
+
+</body>
+</html>
