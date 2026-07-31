@@ -99,18 +99,21 @@
   }
   .quote-author::before { content: "\2014 "; }
 
-  /* ===== Poster ===== */
-  .poster-container {
-    text-align: center; position: relative; min-height: 120px;
-    display: flex; align-items: center; justify-content: center;
+  /* ===== Pomodoro Timer ===== */
+  /* Pomodoro */
+  .pomodoro-display { text-align: center; }
+  .pomodoro-time {
+    font-size: 3.6rem; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    font-family: "SF Mono", "Cascadia Code", "Consolas", monospace;
+    letter-spacing: 0.04em;
   }
-  .poster-img {
-    max-width: 100%; max-height: 450px; border-radius: 6px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: block;
-  }
-  .poster-placeholder {
-    color: #bbb; font-size: 0.95rem;
-  }
+  .pomodoro-label { font-size: 0.9rem; color: #888; margin-top: 0.15rem; }
+  .pomodoro-actions { display: flex; gap: 0.5rem; justify-content: center; margin-top: 0.75rem; }
+  .pomodoro-preset { display: flex; gap: 0.4rem; justify-content: center; margin-bottom: 0.6rem; }
+  .pomodoro-preset .btn { font-size: 0.75rem; padding: 0.25rem 0.65rem; }
+  .pomodoro-preset .btn--active { background: #e8e6e0; border-color: #666; font-weight: 700; }
+  .pomodoro-status { text-align: center; font-size: 0.8rem; margin-top: 0.35rem; color: #888; }
 
   /* ===== Settings Panel ===== */
   .settings-panel {
@@ -159,9 +162,8 @@
     .field input, .field select { background: #2a2a2a; border-color: #555; color: #e0dcd0; }
     .field input:focus, .field select:focus { background: #333; border-color: #999; }
     .quote-text { border-left-color: #555; }
-    .poster-placeholder, .weather-fetch-time, .field-hint { color: #666; }
+    .weather-fetch-time, .field-hint { color: #666; }
     .weather-location { color: #777; }
-    .poster-img { box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
   }
 
   /* ===== Responsive ===== */
@@ -222,12 +224,22 @@
     <div class="quote-author" id="quoteAuthor">--</div>
   </div>
 
-  <!-- Poster -->
-  <div class="card" id="cardPoster">
-    <div class="card__title">🖼 海报</div>
-    <div class="poster-container" id="posterContainer">
-      <div class="poster-placeholder" id="posterPlaceholder">未设置海报 URL，请在设置中配置</div>
-      <img class="poster-img" id="posterImg" src="" alt="海报" style="display:none">
+  <!-- Pomodoro Timer -->
+  <div class="card" id="cardPomodoro">
+    <div class="card__title">🍅 番茄钟</div>
+    <div class="pomodoro-display" id="pomodoroDisplay">
+      <div class="pomodoro-preset">
+        <button class="btn pomodoro-preset-btn btn--active" data-min="25">25分钟</button>
+        <button class="btn pomodoro-preset-btn" data-min="45">45分钟</button>
+        <button class="btn pomodoro-preset-btn" data-min="5">5分钟</button>
+      </div>
+      <div class="pomodoro-time" id="pomodoroTime">25:00</div>
+      <div class="pomodoro-label" id="pomodoroLabel">专注工作</div>
+      <div class="pomodoro-actions">
+        <button class="btn" id="btnPomodoroStart">▶ 开始</button>
+        <button class="btn" id="btnPomodoroReset" disabled>↺ 重置</button>
+      </div>
+      <div class="pomodoro-status" id="pomodoroStatus">点击开始进入专注模式</div>
     </div>
   </div>
 
@@ -254,11 +266,6 @@
           <option value="celsius">摄氏度 °C</option>
           <option value="fahrenheit">华氏度 °F</option>
         </select>
-      </div>
-      <div class="field">
-        <label for="settingPoster">海报图片 URL</label>
-        <input type="url" id="settingPoster" placeholder="https://example.com/poster.jpg">
-        <span class="field-hint">支持 JPG/PNG/WebP，留空则隐藏海报卡片</span>
       </div>
       <div class="field">
         <label for="settingRefresh">天气刷新间隔（分钟）</label>
@@ -296,12 +303,11 @@ const WEATHER_API  = 'https://api.open-meteo.com/v1/forecast';
 const QUOTE_API    = 'https://api.quotable.io/random';
 
 const DEFAULT_SETTINGS = {
-  lat: 31.2304,          // 上海
-  lon: 121.4737,
-  city: '上海',
-  unit: 'celsius',       // celsius | fahrenheit
-  posterUrl: '',
-  refreshMin: 30,        // 天气刷新间隔（分钟）
+  lat: 43.6532,          // 多伦多
+  lon: -79.3832,
+  city: '多伦多',
+  unit: 'celsius',
+  refreshMin: 30,
 };
 
 // 天气代码 → 图标 + 描述
@@ -479,11 +485,7 @@ function applySettings() {
   $('#settingLon').value     = settings.lon;
   $('#settingCity').value    = settings.city;
   $('#settingUnit').value    = settings.unit;
-  $('#settingPoster').value  = settings.posterUrl;
   $('#settingRefresh').value = settings.refreshMin;
-
-  // 更新海报
-  renderPoster();
 
   // 重启天气轮询
   startWeatherPolling();
@@ -501,7 +503,6 @@ function populateSettingsForm() {
   $('#settingLon').value     = settings.lon;
   $('#settingCity').value    = settings.city;
   $('#settingUnit').value    = settings.unit;
-  $('#settingPoster').value  = settings.posterUrl;
   $('#settingRefresh').value = settings.refreshMin;
 }
 
@@ -663,34 +664,72 @@ function loadQuote() {
   fetchQuote();
 }
 
-// ---------- 海报 ----------
-function renderPoster() {
-  const url   = settings.posterUrl && settings.posterUrl.trim();
-  const img   = $('#posterImg');
-  const ph    = $('#posterPlaceholder');
-  const card  = $('#cardPoster');
+// ---------- 番茄钟 ----------
+let pomodoroTotal = 25 * 60;      // 总秒数
+let pomodoroRemaining = 25 * 60;  // 剩余秒数
+let pomodoroInterval = null;
+let pomodoroRunning = false;
 
-  if (url) {
-    card.style.display = '';
-    img.src = url;
-    img.style.display = 'block';
-    img.alt = '海报';
-    ph.style.display = 'none';
-    img.onerror = () => {
-      img.style.display = 'none';
-      ph.style.display = '';
-      ph.textContent = '⚠️ 海报图片加载失败，请检查 URL';
-    };
-    img.onload = () => {
-      img.style.display = 'block';
-      ph.style.display = 'none';
-    };
-  } else {
-    card.style.display = '';
-    img.style.display = 'none';
-    ph.style.display = '';
-    ph.textContent = '未设置海报 URL，请在设置中配置';
+function updatePomodoroDisplay() {
+  const m = String(Math.floor(pomodoroRemaining / 60)).padStart(2, '0');
+  const s = String(pomodoroRemaining % 60).padStart(2, '0');
+  $('#pomodoroTime').textContent = `${m}:${s}`;
+  document.title = pomodoroRunning ? `🍅 ${m}:${s} — Kindle 看板` : 'Kindle 信息看板';
+}
+
+function setPomodoroPreset(min) {
+  if (pomodoroRunning) stopPomodoro();
+  pomodoroTotal = min * 60;
+  pomodoroRemaining = pomodoroTotal;
+  updatePomodoroDisplay();
+  $('#pomodoroLabel').textContent = min >= 25 ? '专注工作' : '休息一下';
+  $('#pomodoroStatus').textContent = '点击开始进入专注模式';
+  // 高亮当前预设
+  document.querySelectorAll('.pomodoro-preset-btn').forEach(b => {
+    b.classList.toggle('btn--active', parseInt(b.dataset.min) === min);
+  });
+}
+
+function startPomodoro() {
+  if (pomodoroRunning) {
+    // 暂停
+    stopPomodoro();
+    return;
   }
+  pomodoroRunning = true;
+  $('#btnPomodoroStart').textContent = '⏸ 暂停';
+  $('#btnPomodoroReset').disabled = false;
+  $('#pomodoroStatus').textContent = '专注中…';
+  $('.pomodoro-preset-btn').forEach(b => b.disabled = true);
+  pomodoroInterval = setInterval(() => {
+    pomodoroRemaining--;
+    updatePomodoroDisplay();
+    if (pomodoroRemaining <= 0) {
+      stopPomodoro();
+      $('#pomodoroStatus').textContent = '⏰ 时间到！休息一下吧';
+      $('#pomodoroLabel').textContent = '完成！';
+    }
+  }, 1000);
+}
+
+function stopPomodoro() {
+  pomodoroRunning = false;
+  if (pomodoroInterval) { clearInterval(pomodoroInterval); pomodoroInterval = null; }
+  $('#btnPomodoroStart').textContent = '▶ 开始';
+  $('#btnPomodoroReset').disabled = false;
+  $('.pomodoro-preset-btn').forEach(b => b.disabled = false);
+  if (pomodoroRemaining <= 0) {
+    document.title = 'Kindle 信息看板';
+  }
+}
+
+function resetPomodoro() {
+  stopPomodoro();
+  pomodoroRemaining = pomodoroTotal;
+  updatePomodoroDisplay();
+  $('#pomodoroStatus').textContent = '点击开始进入专注模式';
+  $('#pomodoroLabel').textContent = pomodoroTotal >= 25 * 60 ? '专注工作' : '休息一下';
+  document.title = 'Kindle 信息看板';
 }
 
 // ---------- 设置 UI ----------
@@ -709,7 +748,6 @@ $('#settingsForm').addEventListener('submit', (e) => {
     lon:        parseFloat($('#settingLon').value) || DEFAULT_SETTINGS.lon,
     city:       $('#settingCity').value.trim(),
     unit:       $('#settingUnit').value,
-    posterUrl:  $('#settingPoster').value.trim(),
     refreshMin: parseInt($('#settingRefresh').value, 10) || 30,
   };
   saveSettings(newSettings);
@@ -753,7 +791,6 @@ $('#btnGeoDetect').addEventListener('click', () => {
 $('#btnRefresh').addEventListener('click', () => {
   fetchWeather();
   loadQuote();
-  renderPoster();
 });
 
 // ---------- 状态栏 ----------
@@ -777,7 +814,15 @@ function init() {
   startClock();
   loadQuote();
   updateStatusTime();
-  setInterval(updateStatusTime, 60000); // 每分钟更新状态栏
+  setInterval(updateStatusTime, 60000);
+
+  // 番茄钟事件
+  $('#btnPomodoroStart').addEventListener('click', startPomodoro);
+  $('#btnPomodoroReset').addEventListener('click', resetPomodoro);
+  document.querySelectorAll('.pomodoro-preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => setPomodoroPreset(parseInt(btn.dataset.min)));
+  });
+  updatePomodoroDisplay();
 }
 
 // 页面加载完成后启动
